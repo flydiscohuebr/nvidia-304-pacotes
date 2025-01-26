@@ -4,19 +4,14 @@
 #feito por Flydiscohuebr
 #===========================================
 
-#update 2024-09-16
+#update 25/01/25
 
 #testes
+
 #Verificando se e ROOT!
 #==========================
 [[ "$UID" -ne "0" ]] || { echo -e "Execute sem permissao root" ; exit 1 ;}
 #==========================
-
-#wget
-if ! command -v wget >/dev/null; then
-    echo "wget não encontrado! Instalando..."
-    sudo pacman -S wget --noconfirm
-fi
 
 #verificando se tem interwebs
 #=====================================================
@@ -27,10 +22,55 @@ if ! wget -q --spider www.google.com; then
 fi
 #=====================================================
 
+#verificando a versão do kernel
+_realextramodules="$(uname -r | cut -d"." -f1-2)"
+KERVERS="linux$(echo $_realextramodules | tr -d .)"
+[[ "$_realextramodules" > 6.13 ]] && { echo "Kernel não suportado. SAINDO / Kernel not supported. leaving" ; exit 1; }
+
+
 if [ "$XDG_CURRENT_DESKTOP" = "KDE" ]; then
     echo -e "KDE Plasma não funciona bem com o driver legado Nvidia 304.137\nPorem esse script possui algumas gambiarras para tornar quase utilizavel\nDeseja continuar com a instalação?"
-    read -p "Aperte enter para continuar ou CTRL+C para sair"
+    read -p "Aperte enter para continuar (espere por problemas) ou CTRL+C para sair"
     KDE_workaround=1
+fi
+
+#makepkg reset
+cd $PWD/pacotes
+cd lib32-nvidia-304xx-utils/
+sudo rm -r pkg/ src/ *.zst *.tar *.run
+cd ../linux-nvidia-304xx/
+sudo rm -r pkg/ src/ *.zst *.tar *.run
+cd ../nvidia-304xx-utils/
+sudo rm -r pkg/ src/ *.zst *.tar *.run
+cd ../nvidia-304xx/
+sudo rm -r pkg/ src/ *.zst *.tar
+cd ../../
+
+#Cinnamon
+if [ "$XDG_CURRENT_DESKTOP" = "Cinnamon" ] || [ "$XDG_CURRENT_DESKTOP" = "X-Cinnamon" ]; then
+  echo "Cinnamon detectado!"
+  echo "A ultima versão funcional do cinnamon foi a 5.2.1"
+  echo "Se você não esta utilizando a versão especificada espere por problemas :)"
+  echo "Aperte enter para continuar mesmo assim ou CTRL+C para sair"
+  echo "PROTIP: considere atualizar seu hardware XD"
+  read
+fi
+
+#Gnome?
+if [ "$XDG_CURRENT_DESKTOP" = "GNOME" ]; then
+  echo "Gnome detectado :( Leia a descrição do video! Saindo..."
+  echo "Caso não saiba o Gnome não funciona com esse driver legado por motivos obvios"
+  echo "PROTIP: considere atualizar seu hardware XD"
+  exit 1
+fi
+
+#KDE
+if [ "$XDG_CURRENT_DESKTOP" = "KDE" ]; then
+  echo "O ambiente grafico KDE pode não funcionar corretamente"
+  echo "Talvez seja necessario o parametro OpenGLIsUnsafe=true nas configurações do kwin"
+  echo "https://youtu.be/OQP9Q9X3PVo"
+  echo "PROTIP: considere atualizar seu hardware XD"
+  sleep 1
 fi
 
 #Flatpak
@@ -49,36 +89,22 @@ em ~/.var/app/nome_do_navegador/config/
 Assim não sendo necessário passar o argumento ao executar a aplicação.
 
 Mais info aqui: https://github.com/flydiscohuebr/nvidia-304?tab=readme-ov-file#chromium-based-browsers-dont-work-properly
+EXTRA: Aplicativos que utilizam Flutter também não funcionam até o momento
 "
   sleep 1
 fi
 
-lts_check=$(uname -r | cut -d"-" -f 3)
-if [ "$lts_check" = "lts" ]; then
-   kernel_flavor="linux-lts"
-   echo "Kernel LTS detectado"
-else
-   kernel_flavor="linux"
-fi
-
-#identificando se o linux-headers esta instalado
-pacman -Q $kernel_flavor-headers &> /dev/null
-if [ ! $? -eq 0 ]; then
-    echo "O pacote $kernel_flavor-headers nao foi detectado"
-    echo "Instalando agora"
-    sudo pacman -S --needed --noconfirm $kernel_flavor-headers
-fi
+echo '
+----------------------------------------------------------
+Instalador não oficial do driver nvidia 304.137 no Manjaro
+by: Flydiscohuebr
+qualquer duvida ou problemas durante a instalação
+envia um comentario no video correspondente
+----------------------------------------------------------
+'
 
 echo '
------------------------------------------------------------------------
-Instalador nao oficial do driver nvidia 304.137
-by: Flydiscohuebr
-qualquer erro ou problema durante a instalação envie um comentario
-no video correspondente
------------------------------------------------------------------------
-
 IMPORTANTE IMPORTANTE IMPORTANTE IMPORTANTE
-
 OBS: Testado com kernel 6.10 e anteriores
 Antes de iniciarmos, verifique se o sistema está 100% atualizado.
 
@@ -86,81 +112,62 @@ OBS: confirme todas as perguntas a seguir e digite sua senha de usuário quando 
 Caso contrário, a instalação não pode ser bem sucedida, ok?
 
 Dica: tenha também uma conexão com a internet estável, pois vai ser necessário.
-
-IMPORTANTE IMPORTANTE IMPORTANTE IMPORTANTE
 '
+read -p "Aperte enter para continuar ou ctrl+c para sair "
 
-read -p "aperte enter para continuar ou ctrl+c para sair "
+#instalando os kernel headers
+if [[ -n $KERVERS ]]; then
+    echo "kernel $KERVERS detectado instalando os headers correspondente"
+    sudo pamac install "$KERVERS"-headers
+fi
 
 # isso vai ajudar a galera que não olha a descrição do video
 if [ "$XDG_CURRENT_DESKTOP" = "XFCE" ]; then
     xfconf-query -c xfwm4 -p /general/vblank_mode -s xpresent
 fi
 
-#pacotes necessarios
-sudo pacman -S --needed --noconfirm git gtk2 base-devel patchelf
+#instalando os bagui necessario pra dar serto
+sudo pamac install git base-devel gtk2 patchelf --no-confirm
 
-#pacotes conflitantes
+#removendo pacotes conflitantes antes de dar merda
 yes | LC_ALL=en_US.UTF-8 sudo pacman -Rc xf86-input-wacom
 yes | LC_ALL=en_US.UTF-8 sudo pacman -Rc xf86-video-fbdev
 
-#instalando xorg
+#instalando o xorg 1.19 corrigido
 cd $PWD/pacotes/xorg
-yes | LC_ALL=en_US.UTF-8 sudo pacman -Ud xorg-server1.19-*
-#downgrade libinput para funcionar teclado e mouse
+yes | LC_ALL=en_US.UTF-8 sudo pacman -U xorg-server1.19-*
+#fazendo downgrade do xf86-input-libinput para o teclado e mouse funcionar
 yes | LC_ALL=en_US.UTF-8 sudo pacman -U xf86-input-libinput-*
 cd ../
 
 #instalando os bagui da nvidia agr
 #nvidia-304xx-utils
 cd nvidia-304xx-utils
-makepkg -cfis --noconfirm
+makepkg -si --noconfirm
 cd ../
-
-#nvidia-304xx-?
-if [ "$lts_check" = "lts" ]; then
-    cd nvidia-304xx-lts
-    makepkg -cfis --noconfirm
-    cd ../
-else
-    cd nvidia-304xx
-    makepkg -cfis --noconfirm
-    cd ../
-fi
-
+#linux-nvidia-304xx
+cd linux-nvidia-304xx
+makepkg -si --noconfirm
+cd ../
 #lib32-nvidia-304xx-utils
 cd lib32-nvidia-304xx-utils
-makepkg -cfis --noconfirm
+makepkg -si --noconfirm
+cd ../
+#nvidia-304xx
+cd nvidia-304xx
+makepkg -si --noconfirm
 cd ../
 
-#criando o xorg.conf e movendo pra /etc/X11/xorg.conf.d
-sudo nvidia-xconfig -o "/etc/X11/xorg.conf.d/20-nvidia.conf" --composite --no-logo
-sudo sed -i /'Section "Files"'/,/'EndSection'/s%'EndSection'%"\tModulePath \"/usr/lib64/nvidia/xorg\" \nEndSection"%g /etc/X11/xorg.conf.d/20-nvidia.conf
-sudo sed -i /'Section "Files"'/,/'EndSection'/s%'EndSection'%"\tModulePath \"/usr/lib64/xorg/modules\" \nEndSection"%g /etc/X11/xorg.conf.d/20-nvidia.conf
-sudo sed -i 's/HorizSync/#HorizSync/' /etc/X11/xorg.conf.d/20-nvidia.conf
-sudo sed -i 's/VertRefresh/#VertRefresh/' /etc/X11/xorg.conf.d/20-nvidia.conf
+#adcionando nomodeset pro sistema iniciar sem o nouveau
+sudo sed -i 's/GRUB_CMDLINE_LINUX="[^"]*/& nomodeset/' /etc/default/grub
+sudo sed -i 's/GRUB_CMDLINE_LINUX="[^"]*/& nvidia_drm.modeset=1/' /etc/default/grub
+sudo sed -i 's/GRUB_CMDLINE_LINUX="[^"]*/& initcall_blacklist=simpledrm_platform_driver_init/' /etc/default/grub
 
-#colocando nouveau e seus amigos na blacklist
-sudo cp blacklist_nouveau.conf /usr/lib/modprobe.d/
+#gerando mkinitcpio
+sudo mkinitcpio -p $KERVERS
 
-#adcionando nomodeset
-sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="[^"]*/& nomodeset/' /etc/default/grub
-sudo sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT='[^']*/& nomodeset/" /etc/default/grub
-sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="[^"]*/& nvidia_drm.modeset=1/' /etc/default/grub
-sudo sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT='[^']*/& nvidia_drm.modeset=1/" /etc/default/grub
-sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="[^"]*/& initcall_blacklist=simpledrm_platform_driver_init/' /etc/default/grub
-sudo sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT='[^']*/& initcall_blacklist=simpledrm_platform_driver_init/" /etc/default/grub
-sudo grub-mkconfig -o /boot/grub/grub.cfg
-
-#mkinitcpio
-pacman -Q dracut &> /dev/null
-if [ $? -eq 0 ]; then
-    echo "Dracut detectado"
-    sudo dracut --force /boot/initramfs-linux.img
-    sudo dracut -N --force /boot/initramfs-linux-fallback.img
-else
-    sudo mkinitcpio -p linux
-fi
+#atualizando o grub para fazer efeito
+sudo update-grub
 
 #fix segfault
 sudo patchelf --add-needed /usr/lib64/libpthread.so.0 /usr/lib/nvidia/libGL.so.304.137
@@ -174,6 +181,7 @@ fi
 
 #Flatpak
 if command -v flatpak >/dev/null; then
+  mkdir -p ~/.local/share/flatpak/overrides
   echo -e "[Environment]\nLD_PRELOAD=/usr/lib/x86_64-linux-gnu/GL/nvidia-304-137/lib/libGL.so.304.137:/app/lib/i386-linux-gnu/GL/nvidia-304-137/lib/libGL.so.304.137" >> ~/.local/share/flatpak/overrides/global
 fi
 
@@ -219,7 +227,8 @@ reinicie o computador agora
 qualquer coisa
 Telegram: @Flydiscohuebr
 ou escreva um comentario no video que vc baixou isso :)
-OBS: caso o pc trave nessa parte puxe da tomada e ligue novamente XD
+
+Caso o pc trave nessa parte reinicie manualmente XD
 '
     sudo patchelf --add-needed /usr/lib/nvidia/libGL.so.1 /usr/lib/libQt6Gui.so.6
 fi

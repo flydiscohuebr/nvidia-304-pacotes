@@ -4,7 +4,7 @@
 #feito por Flydiscohuebr
 #===========================================#
 
-#update ter 17 set 2024 00:55
+#update 25 jan 2025
 
 #testes
 #Verificando se e ROOT!
@@ -27,6 +27,33 @@ if ! wget -q --spider www.google.com; then
 fi
 #=====================================================#
 
+#Cinnamon
+if [ "$XDG_CURRENT_DESKTOP" = "Cinnamon" ] || [ "$XDG_CURRENT_DESKTOP" = "X-Cinnamon" ]; then
+  echo "Cinnamon detectado!"
+  echo "A ultima versão funcional do cinnamon foi a 5.2.1"
+  echo "Se você não esta utilizando a versão especificada espere por problemas :)"
+  echo "Aperte enter para continuar mesmo assim ou CTRL+C para sair"
+  echo "PROTIP: considere atualizar seu hardware XD"
+  read
+fi
+
+#Gnome?
+if [ "$XDG_CURRENT_DESKTOP" = "GNOME" ]; then
+  echo "Gnome detectado :( Leia a descrição do video! Saindo..."
+  echo "Caso não saiba o Gnome não funciona com esse driver legado por motivos obvios"
+  echo "PROTIP: considere atualizar seu hardware XD"
+  exit 1
+fi
+
+#KDE
+if [ "$XDG_CURRENT_DESKTOP" = "KDE" ]; then
+  echo "O ambiente grafico KDE pode não funcionar corretamente"
+  echo "Talvez seja necessario o parametro OpenGLIsUnsafe=true nas configurações do kwin"
+  echo "https://youtu.be/OQP9Q9X3PVo"
+  echo "PROTIP: considere atualizar seu hardware XD"
+  sleep 1
+fi
+
 #Flatpak
 if command -v flatpak >/dev/null; then
   echo -e "Flatpak detectado!
@@ -43,6 +70,7 @@ em ~/.var/app/nome_do_navegador/config/
 Assim não sendo necessário passar o argumento ao executar a aplicação.
 
 Mais info aqui: https://github.com/flydiscohuebr/nvidia-304?tab=readme-ov-file#chromium-based-browsers-dont-work-properly
+EXTRA: Aplicativos que utilizam Flutter também não funcionam até o momento
 "
   sleep 1
 fi
@@ -171,13 +199,16 @@ sudo apt update && sudo apt upgrade -y || { echo "falha ao atualizar pacotes. Te
 # isso vai ajudar a galera que não olha a descrição do video
 if [ "$XDG_CURRENT_DESKTOP" = "XFCE" ]; then
   xfconf-query -c xfwm4 -p /general/vblank_mode -s xpresent || { xfconf-query -c xfwm4 -p /general/vblank_mode -t string -s "xpresent" --create;}
-  #sed -i '/vblank_mode/s/auto/xpresent/g' /home/$USER/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
 fi
 
 # se a distro utiliza outro ambiente grafico e o xfwm4 como gerenciador de janelas isso vai ser util
 if [ $(dpkg-query -W -f='${Status}' xfwm4 2>/dev/null | grep -c "ok installed") -eq 1 ] && [ $(dpkg-query -W -f='${Status}' xfconf 2>/dev/null | grep -c "ok installed") -eq 1 ]; then
   xfconf-query -c xfwm4 -p /general/vblank_mode -s xpresent || { xfconf-query -c xfwm4 -p /general/vblank_mode -t string -s "xpresent" --create;}
-  #sed -i '/vblank_mode/s/auto/xpresent/g' /home/$USER/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
+fi
+
+#all end
+if [ $(dpkg-query -W -f='${Status}' xfwm4 2>/dev/null | grep -c "ok installed") -eq 1 ] && [ $(dpkg-query -W -f='${Status}' xfconf 2>/dev/null | grep -c "ok installed") -eq 1 ] && [ $(command -v xfconf-query >/dev/null) -eq 1 ]; then
+  sed -i '/vblank_mode/s/auto/xpresent/g' /home/$USER/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
 fi
 
 #instalando o nvidia-xconfig
@@ -259,17 +290,21 @@ xserver-xorg-video-nvidia-legacy-304xx
 
 sudo nvidia-xconfig #criando arquivo xorg.conf
 
-#acima do kernel 6.1 adicionar o parametro nvidia_drm.modeset=1 por que sim
+#acima do kernel 5.17 adicionar o parametro nvidia_drm.modeset=1 por que sim
 kernel_versi=$(uname -r | cut -d"." -f1-2)
-if [[ "$kernel_versi" > "6.1" ]]; then
-	sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="[^"]*/& nvidia_drm.modeset=1/' /etc/default/grub
+if [[ "$kernel_versi" > "5.17" ]]; then
+  sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="[^"]*/& nvidia_drm.modeset=1/' /etc/default/grub
   sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="[^"]*/& initcall_blacklist=simpledrm_platform_driver_init/' /etc/default/grub
+  #Algumas distros utilizam aspas simples
+  sudo sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT='[^']*/& nvidia_drm.modeset=1/" /etc/default/grub
+  sudo sed -i "s/GRUB_CMDLINE_LINUX_DEFAULT='[^']*/& initcall_blacklist=simpledrm_platform_driver_init/" /etc/default/grub
   sudo update-grub
 fi
 
 #Flatpak
 if command -v flatpak >/dev/null; then
-  echo -e "[Environment]\nLD_PRELOAD=/app/lib/i386-linux-gnu/GL/nvidia-304-137/lib/libGL.so.304.137" >> ~/.local/share/flatpak/overrides/global
+  mkdir -p ~/.local/share/flatpak/overrides
+  echo -e "[Environment]\nLD_PRELOAD=/usr/lib/x86_64-linux-gnu/GL/nvidia-304-137/lib/libGL.so.304.137:/app/lib/i386-linux-gnu/GL/nvidia-304-137/lib/libGL.so.304.137" >> ~/.local/share/flatpak/overrides/global
 fi
 
 #Chrome flatpak se detectado
@@ -278,13 +313,13 @@ fi
 #fi
 
 #Chromium/electron(fallback) workaround
-echo -e "--disable-gpu" >> ~/.config/chromium-flags.conf
-ln -s ~/.config/chromium-flags.conf ~/.config/chrome-flags.conf
-ln -s ~/.config/chromium-flags.conf ~/.config/chrome-dev-flags.conf
-ln -s ~/.config/chromium-flags.conf ~/.config/chrome-beta-flags.conf
-ln -s ~/.config/chromium-flags.conf ~/.config/electron-flags.conf
-ln -s ~/.config/chromium-flags.conf ~/.config/code-flags.conf
-ln -s ~/.config/chromium-flags.conf ~/.config/codium-flags.conf
+#echo -e "--disable-gpu" >> ~/.config/chromium-flags.conf
+#ln -s ~/.config/chromium-flags.conf ~/.config/chrome-flags.conf
+#ln -s ~/.config/chromium-flags.conf ~/.config/chrome-dev-flags.conf
+#ln -s ~/.config/chromium-flags.conf ~/.config/chrome-beta-flags.conf
+#ln -s ~/.config/chromium-flags.conf ~/.config/electron-flags.conf
+#ln -s ~/.config/chromium-flags.conf ~/.config/code-flags.conf
+#ln -s ~/.config/chromium-flags.conf ~/.config/codium-flags.conf
 
 #Aparentemente não mais necessario
 #if [[ -n $deb12_sid_detected ]]; then
